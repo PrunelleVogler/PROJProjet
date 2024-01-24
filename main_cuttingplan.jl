@@ -4,7 +4,7 @@ using Libdl
 
 
 function cutting_plane_algorithm()
-    include("Data/processed/500_USA-road-d.BAY.gr")
+    include("Data/processed/20_USA-road-d.BAY.gr")
     nb_cities = n
     nb_edges = size(Mat)[1]
     
@@ -33,53 +33,71 @@ function cutting_plane_algorithm()
 
     #============Separation problem 1==================#
     m1 = Model(CPLEX.Optimizer)
-    @variable(m1, delta1[1:nb_edges] >=0)
+    @variable(m1, 0 <= delta1[1:nb_edges])
+    @variable(m1, a, Bin)
     @constraint(m1, sum(delta1[e] for e in 1:nb_edges) <= d1)
-    @constraint(m1, [e in :nb_edges], delta1[e] <= Mat[e, 4])
+    @constraint(m1, [e in 1:nb_edges], delta1[e] <= Mat[e, 4])
+    @objective(m1, Max, 1)
 
     #============Separation problem 2==================#
     m2 = Model(CPLEX.Optimizer)
     @variable(m2, delta2[1:nb_cities] >=0)
+    @variable(m2, b, Bin)
     @constraint(m2, sum(delta2[i] for i in 1:nb_cities) <= d2)
-    @constraint(m2, [i in :nb_cities], delta2[i] <= 2)
+    @constraint(m2, [i in 1:nb_cities], delta2[i] <= 2)
+    @objective(m2, Max, 1)
     
     no_optimal_solution_found = true
-
-    while no_optimal_solution_found
+    iteration = 0
+    while no_optimal_solution_found && iteration < 10
         optimize!(m)
-        x_val = JuMP.value.(x)
-        z_val = JuMP.value.(z)
-        y_val = JuMP.value.(y)
         feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
         
         if feasibleSolutionFound
             x_val = JuMP.value.(x)
             z_val = JuMP.value.(z)
             y_val = JuMP.value.(y)
+            println("Solution master pb trouvee")
 
             # Modifier le pb 1 et le résoudre
-            @objective(m1, Max, sum((delta1[e] + Mat[e, 4]) * x_val[e] for e in 1:nb_edges))
+            new_objective1 = @expression(m1, sum((delta1[e] + Mat[e, 4]) * x_val[e] for e in 1:nb_edges))
+            set_objective_function(m1, new_objective1)
             optimize!(m1)
 
-            # Modifier le pb 1 et le résoudre
-            @objective(m2, Max, p[s] + p[t] + delta2[s] * ph[s] + delta2[t] * ph[t] + sum((delta1[i] * ph[i] + p[i]) * x_val[e] for i in 1:nb_cities if i !=s for e in 1:nb_edges if Mat[e][1] == i ))
+            # Modifier le pb 2 et le résoudre
+            new_objective2 = @expression(m2, p[s] + p[t] + delta2[s] * ph[s] + delta2[t] * ph[t] + sum((delta2[i] * ph[i] + p[i]) * x_val[e] for i in 1:nb_cities if i !=s for e in 1:nb_edges if Mat[e][1] == i ))
+            set_objective_function(m2, new_objective2)
             optimize!(m2)
+            
+            feasibleSolutionFound1 = primal_status(m1) == MOI.FEASIBLE_POINT
+            feasibleSolutionFound2 = primal_status(m2) == MOI.FEASIBLE_POINT
+            if !feasibleSolutionFound1 || !feasibleSolutionFound2
+                println("Pb de sép non résolu")
+                no_optimal_solution_found = false
+                break
+            end
+            obj1 = objective_value(m1)
+            obj2 = objective_value(m2)
 
             if z_val >= obj1 && obj2 <= S
                 no_optimal_solution_found = false
-                println("Solution optimale trouvée")
+                println("Solution optimale trouvée en ", iteration, " iterations")
             end
             if z_val < obj1
                 delta1_val = JuMP.value.(delta1)
                 @constraint(m, z >= sum((delta1_val[e] + Mat[e, 4]) * x[e] for e in 1:nb_edges))
+                println("Ajout coupe 1")
             end
             if obj2 > S
                 delta2_val = JuMP.value.(delta2)
                 @constraint(m, p[s] + p[t] + delta2_val[s] * ph[s] + delta2_val[t] * ph[t] + sum((delta2_val[i] * ph[i] + p[i]) * x[e] for i in 1:nb_cities if i !=s for e in 1:nb_edges if Mat[e][1] == i ) <= S)
+                println("Ajout coupe 2")
             end
         else
             println("Problème de résolution du master problem")
         end
+        iteration += 1
+        #no_optimal_solution_found = false
     end
 
     # feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
