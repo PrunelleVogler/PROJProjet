@@ -205,12 +205,7 @@ function cutting_plane_algorithm(instanceName, timeLimit)
             lower_bound = objective_value(m)
         end
     end
-    println("Porbleme résolu !!!")
-    for e in 1:nb_edges
-        if x_val[e] == 1
-            println(Mat[e, 1], " ", Mat[e, 2], " ")
-        end
-    end
+
     # feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
     # if feasibleSolutionFound
     #     println("Solution trouvée de ", s, " a ", t)
