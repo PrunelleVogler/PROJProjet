@@ -149,10 +149,6 @@ function dual_algorithm(instanceName, timeLimit)
     time_end = time()
     lower_bound = 0
     upper_bound = 0
-    if primal_status(m) == MOI.OPTIMAL
-        upper_bound = objective_value(m)
-        lower_bound = objective_bound(m)
-    end
     if primal_status(m) == MOI.FEASIBLE_POINT
         upper_bound = objective_value(m)
         lower_bound = objective_bound(m)
