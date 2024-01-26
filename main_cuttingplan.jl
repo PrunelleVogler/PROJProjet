@@ -1,7 +1,9 @@
 using JuMP
 using CPLEX
 using Libdl
+using TimerOutputs
 epsilon = 0.0001
+instanceName = "Data/processed/20_USA-road-d.BAY.gr"
 
 function lecture(file)
     if isfile(file)
@@ -88,10 +90,9 @@ function lecture(file)
     return n, s, t, S, d1, d2, p, ph, Mat
 end
 
-function cutting_plane_algorithm()
-    #include("Data/processed/20_USA-road-d.BAY.gr")
-    n, s, t, S, d1, d2, p, ph, Mat = lecture("Data/processed/500_USA-road-d.BAY.gr")
-    
+function cutting_plane_algorithm(instanceName, timeLimit)
+    time_begin = time()
+    n, s, t, S, d1, d2, p, ph, Mat = lecture(instanceName)
     nb_cities = n
     nb_edges = size(Mat)[1]
     
@@ -140,9 +141,10 @@ function cutting_plane_algorithm()
     
     no_optimal_solution_found = true
     iteration = 0
-    optimum = 0
+    upper_bound = 0
+    lower_bound = 0
     x_val = zeros(nb_edges)
-    while no_optimal_solution_found && iteration < 100
+    while no_optimal_solution_found && (time() - time_begin < timeLimit)
         optimize!(m)
         feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
         
@@ -177,7 +179,8 @@ function cutting_plane_algorithm()
             if z_val >= obj1 - epsilon && obj2 <= S + epsilon
                 no_optimal_solution_found = false
                 println("Solution optimale trouvée en ", iteration, " iterations")
-                optimum = z_val
+                upper_bound = objective_value(m)
+                lower_bound = objective_bound(m)
             end
             if z_val < obj1
                 delta1_val = JuMP.value.(delta1)
@@ -195,27 +198,35 @@ function cutting_plane_algorithm()
         iteration += 1
         #no_optimal_solution_found = false
     end
+    if time() - time_begin >= timeLimit
+        optimize!(m)
+        if primal_status(m) == MOI.FEASIBLE_POINT
+            upper_bound = 0
+            lower_bound = objective_value(m)
+        end
+    end
     println("Porbleme résolu !!!")
-    println("Valeur objectif : ", optimum)
     for e in 1:nb_edges
         if x_val[e] == 1
             println(Mat[e, 1], " ", Mat[e, 2], " ")
         end
     end
-    feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
-    isOptimal = termination_status(m) == MOI.OPTIMAL
-
-    if feasibleSolutionFound
-        println("Solution trouvée de ", s, " a ", t)
-        vX = JuMP.value.(x)
-        println("Valeurs de x")
-        for e in 1:nb_edges
-            if vX[e] == 1
-                println(Mat[e, 1], " ", Mat[e, 2], " ")
-            end
-        end
-        #println("Obj ", isOptimal.value)
-    end
+    # feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
+    # if feasibleSolutionFound
+    #     println("Solution trouvée de ", s, " a ", t)
+    #     vX = JuMP.value.(x)
+    #     println("Valeurs de x")
+    #     for e in 1:nb_edges
+    #         if vX[e] == 1
+    #             println(Mat[e, 1], " ", Mat[e, 2], " ")
+    #         end
+    #     end
+    # end
+    println("Upper bound ", upper_bound)
+    println("Lower bound ", lower_bound)
+    time_end = time()
+    println("Time ", time_end - time_begin)
+    return upper_bound, lower_bound, time_end - time_begin
 end
 
-cutting_plane_algorithm()
+cutting_plane_algorithm(instanceName, 2)
