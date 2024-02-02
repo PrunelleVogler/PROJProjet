@@ -1,9 +1,9 @@
-using CSV
+time_limit = 180
 
+### Lecture de l'ensemble des instances
+nb_villes = [1000,1100,1200,1300,1400,1500]
 
-
-### Lecture de l'ensemble des instance
-nb_villes = [20,40,60,80,100,120,140,160,180,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300,2400,2500]
+# nb_villes = [20,40,60,80,100,120,140,160,180,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300,2400,2500]
 area = ["BAY", "COL", "NY"]
 
 # Initialiser une liste pour stocker les termes
@@ -17,32 +17,33 @@ for nb in nb_villes
 end
 
 
-### Ouvrir CSV
-# Lire le fichier CSV existant
-csv_file = "PROJDonnéesDual.csv"
-data = CSV.File(csv_file) |> DataFrame
-
-# Fonction pour mettre à jour le fichier CSV
-function update_csv(instance_name, execution_time, objective, bound, gap)
-    # Trouver l'index de la ligne correspondant à l'instance actuelle
-    instance_index = findfirst(data[:, "Instance"] .== instance_name)
-
-    # Mettre à jour les colonnes appropriées
-    data[instance_index, "Time"] = execution_time
-    data[instance_index, "Obj"] = objective
-    data[instance_index, "Borne"] = bound
-    data[instance_index, "Gap"] = gap
-
-    # Écrire les modifications dans le fichier CSV
-    CSV.write(csv_file, data)
-end
+### Ouvrir fichier txt
 
 
+### Executer dual/cutting plane/ branch and cutting et remplir le fichier txt
+# include("main_cuttingplan.jl")
+# file_name = "cutting_plane"*"-"*string(minimum(nb_villes))*"-"*string(maximum(nb_villes))*"-"*string(time_limit)*"s.txt"
 
-### Executer dual/cutting plane/ branch and cutting et remplir CSV
+include("main_dual.jl")
+file_name = "dual"*"-"*string(minimum(nb_villes))*"-"*string(maximum(nb_villes))*"-"*string(time_limit)*"s.txt"
+
+# include("branch_and_cut.jl")
+# file_name = "branch_and_cut"*"-"*string(minimum(nb_villes))*"-"*string(maximum(nb_villes))*"-"*string(time_limit)*"s.txt"
+file = open(file_name,"w")
 
 for instance in list_instances
-    
-    # Mettre à jour le fichier CSV
-    update_csv(instance_name, execution_time, objective, bound, gap)
+
+    # Execution dual
+    println("Data/processed/"*instance)
+    instance_name = "Data/processed/"*instance 
+    # upper_bound, lower_bound, execution_time = dual_algorithm(instance_name, time_limit)
+    # upper_bound, lower_bound, execution_time = cutting_plane_algorithm(instance_name, time_limit)
+    upper_bound, lower_bound, execution_time = dual_algorithm(instance_name, time_limit)
+    write(file, join((instance, string(execution_time), string(lower_bound), string(upper_bound), string(abs(upper_bound - lower_bound) / upper_bound)), ";"))
+    write(file, "\n")
 end
+
+close(file)
+
+
+

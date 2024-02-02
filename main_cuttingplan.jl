@@ -3,7 +3,7 @@ using CPLEX
 using Libdl
 using TimerOutputs
 epsilon = 0.0001
-instanceName = "Data/processed/20_USA-road-d.BAY.gr"
+# instanceName = "Data/processed/20_USA-road-d.BAY.gr"
 
 function lecture(file)
     if isfile(file)
@@ -224,4 +224,4 @@ function cutting_plane_algorithm(instanceName, timeLimit)
     return upper_bound, lower_bound, time_end - time_begin
 end
 
-cutting_plane_algorithm(instanceName, 2)
+# cutting_plane_algorithm(instanceName, 2)
