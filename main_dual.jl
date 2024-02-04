@@ -159,4 +159,4 @@ function dual_algorithm(instanceName, timeLimit)
     return upper_bound, lower_bound, time_end - time_begin
 end
 
-dual_algorithm(instanceName, 10)
+# upper_bound, lower_bound, execution_time = dual_algorithm(instanceName, 10)
