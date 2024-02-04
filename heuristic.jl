@@ -4,7 +4,8 @@ using Libdl
 using TimerOutputs
 using Distributions
 epsilon = 0.0001
-instanceName = "Data/processed/20_USA-road-d.BAY.gr"
+instanceName = "Data/processed/2100_USA-road-d.BAY.gr"
+timeLimit = 600
 
 function lecture(file)
     if isfile(file)
@@ -94,19 +95,20 @@ end
 function heuristic_algorithm(instanceName, timeLimit)
     time_begin = time()
     n, s, t, S, d1, d2, p, ph, Mat = lecture(instanceName)
+    println("Fin lecture : ", time() - time_begin)
     nb_cities = n
     nb_edges = size(Mat)[1]
+    #Number of different robust value in the objective
     nb_U1 = 10
-    nb_U2 = 10000
+    #Number of robust constraint considered
+    nb_U2 = 10
     
-    #================Master problem==================#
-    
+    # Static model
     m = Model(CPLEX.Optimizer)
-    #set_optimizer_attribute(m, "CPX_PARAM_SCRIND", 0)
+    set_optimizer_attribute(m, "CPX_PARAM_SCRIND", 0)
     @variable(m, x[1:nb_edges], Bin)
     @variable(m, y[1:nb_cities], Bin)
     
-    # Contraintes de flot
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == s) == 1)
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == t) == 1)
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == s) == 0)
@@ -116,10 +118,8 @@ function heuristic_algorithm(instanceName, timeLimit)
             @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == i) == sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == i))
         end
     end
-    #d_ij = Mat[ , 3]
-    #D_ij = Mat[ , 4]
-    # Contraintes U1 et U2
 
+    # Stochastic robust constraints
     for i in 1:nb_U2
         delta = zeros(nb_cities)
         for k in 1:nb_cities
@@ -134,7 +134,9 @@ function heuristic_algorithm(instanceName, timeLimit)
         @constraint(m, sum(y[i] * (p[i] + delta[i] * ph[i]) for i in 1:nb_cities) <= S)
     end
     @objective(m, Min, 0)
+    println("Fin ajout contraintes robustes : ", time() - time_begin)
 
+    # Solve nb_U1 problems with different objective
     x_val = zeros((nb_U1, nb_edges))
     d_1 = zeros((nb_U1, nb_edges))
     for k in 1:nb_U1
@@ -146,26 +148,29 @@ function heuristic_algorithm(instanceName, timeLimit)
         somme = sum(d_1[k,e] for e in 1:nb_edges)
         while somme > d1
             e = rand(1:nb_edges)
-            d_1[k,e] = 0
+            if d_1[k,e] > 0
+                d_1[k,e] = rand(Uniform(0, d_1[k,e]))
+            end
             somme = sum(d_1[k,e] for e in 1:nb_edges)
         end
-        println(d_1[k])
         new_objective = @expression(m, sum(x[e] * Mat[e, 3] * (1 + d_1[k,e]) for e in 1:nb_edges))
         set_objective_function(m, new_objective)
+        set_optimizer_attribute(m, "CPX_PARAM_TILIM", timeLimit / nb_U1)
         optimize!(m)
-
+        
         x_val_prime = JuMP.value.(x)
         for e in 1:nb_edges
             x_val[k, e] = x_val_prime[e]
         end
-        println("Modèle résolu")
     end
-
+    println("Fin calcul des solutions : ", time() - time_begin)
+    
+    #Find the solution of min max
     Val_heuristic = 100000000
     for k in 1:nb_U1
         max_x_k = 0
         for j in 1:nb_U1
-            d_1_x_k = sum(x_val[k, e] * Mat[e, 3] * (1 + d_1[k,e]) for e in 1:nb_edges)
+            d_1_x_k = sum(x_val[k, e] * Mat[e, 3] * (1 + d_1[j,e]) for e in 1:nb_edges)
             if d_1_x_k > max_x_k
                 max_x_k = d_1_x_k
             end
@@ -175,38 +180,8 @@ function heuristic_algorithm(instanceName, timeLimit)
         end
     end
     println("val : ", Val_heuristic)
-    no_optimal_solution_found = true
-    iteration = 0
-    upper_bound = 0
-    lower_bound = 0
-    x_val = zeros(nb_edges)
 
-
-
-    # if time() - time_begin >= timeLimit
-    #     optimize!(m)
-    #     if primal_status(m) == MOI.FEASIBLE_POINT
-    #         upper_bound = 0
-    #         lower_bound = objective_value(m)
-    #     end
-    # end
-
-    # # feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
-    # # if feasibleSolutionFound
-    # #     println("Solution trouvée de ", s, " a ", t)
-    # #     vX = JuMP.value.(x)
-    # #     println("Valeurs de x")
-    # #     for e in 1:nb_edges
-    # #         if vX[e] == 1
-    # #             println(Mat[e, 1], " ", Mat[e, 2], " ")
-    # #         end
-    # #     end
-    # # end
-    # println("Upper bound ", upper_bound)
-    # println("Lower bound ", lower_bound)
-    # time_end = time()
-    # println("Time ", time_end - time_begin)
-    return upper_bound, lower_bound
+    return Val_heuristic, time() - time_begin
 end
 
-heuristic_algorithm(instanceName, 2)
+#heuristic_algorithm(instanceName, 2)
