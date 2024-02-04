@@ -131,21 +131,27 @@ function dual_algorithm(instanceName, timeLimit)
     set_optimizer_attribute(m, "CPX_PARAM_TILIM", timeLimit - (time() - time_begin))
     optimize!(m)
 
-    # feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
-    # if feasibleSolutionFound
-    #     println("Solution trouvée de ", s, " a ", t)
-    #     x_val = JuMP.value.(x)
-    #     alpha_val = JuMP.value.(alpha)
-    #     lambda_val = JuMP.value.(lambda)
-    #     println("Valeurs de x")
-    #     obj = d1 * alpha_val + sum(Mat[e, 3] * x_val[e] + Mat[e, 4] * lambda_val[e] for e in 1:nb_edges)
-    #     for e in 1:nb_edges
-    #         if x_val[e] == 1
-    #             println(Mat[e, 1], " ", Mat[e, 2], " ")
-    #         end
-    #     end
-    #     println("Obj ", obj)
-    # end
+    feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
+    if feasibleSolutionFound
+        println("Solution trouvée de ", s, " a ", t)
+        path = []
+        x_val = JuMP.value.(x)
+        alpha_val = JuMP.value.(alpha)
+        lambda_val = JuMP.value.(lambda)
+        println("Valeurs de x")
+        obj = d1 * alpha_val + sum(Mat[e, 3] * x_val[e] + Mat[e, 4] * lambda_val[e] for e in 1:nb_edges)
+        for e in 1:nb_edges
+            if x_val[e] == 1
+                println(Mat[e, 1], " ", Mat[e, 2], " ")
+                push!(path,string(Mat[e, 1])*"-"*string(Mat[e, 2]))
+            end
+        end        
+        println("Obj ", obj)
+
+    else
+        path = []
+    end
+
     time_end = time()
     lower_bound = 0
     upper_bound = 0
@@ -156,7 +162,7 @@ function dual_algorithm(instanceName, timeLimit)
     println("Upper bound ", upper_bound)
     println("Lower bound ", lower_bound)
     println("Time ", time_end - time_begin)
-    return upper_bound, lower_bound, time_end - time_begin
+    return upper_bound, lower_bound, time_end - time_begin, path
 end
 
 # upper_bound, lower_bound, execution_time = dual_algorithm(instanceName, 10)
