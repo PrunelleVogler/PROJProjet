@@ -115,7 +115,7 @@ function bac_algorithm(instanceName, timeLimit)
 
     #================Master problem==================#
     m = Model(CPLEX.Optimizer)
-    set_optimizer_attribute(m,"CPX_PARAM_TILIM",time_limit)
+    set_optimizer_attribute(m,"CPX_PARAM_TILIM",timeLimit)
     MOI.set(m, MOI.NumberOfThreads(), 1) #pour pouvoir utiliser les callbacks
     @variable(m, x[1:nb_edges], Bin)
     @variable(m, z >= 0)
