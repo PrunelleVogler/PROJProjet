@@ -95,13 +95,12 @@ end
 function heuristic_algorithm(instanceName, timeLimit)
     time_begin = time()
     n, s, t, S, d1, d2, p, ph, Mat = lecture(instanceName)
-    println("Fin lecture : ", time() - time_begin)
     nb_cities = n
     nb_edges = size(Mat)[1]
     #Number of different robust value in the objective
-    nb_U1 = 10
+    nb_U1 = 100
     #Number of robust constraint considered
-    nb_U2 = 10
+    nb_U2 = 1000
     
     # Static model
     m = Model(CPLEX.Optimizer)
@@ -134,7 +133,6 @@ function heuristic_algorithm(instanceName, timeLimit)
         @constraint(m, sum(y[i] * (p[i] + delta[i] * ph[i]) for i in 1:nb_cities) <= S)
     end
     @objective(m, Min, 0)
-    println("Fin ajout contraintes robustes : ", time() - time_begin)
 
     # Solve nb_U1 problems with different objective
     x_val = zeros((nb_U1, nb_edges))
@@ -163,7 +161,6 @@ function heuristic_algorithm(instanceName, timeLimit)
             x_val[k, e] = x_val_prime[e]
         end
     end
-    println("Fin calcul des solutions : ", time() - time_begin)
     
     #Find the solution of min max
     Val_heuristic = 100000000
@@ -179,7 +176,6 @@ function heuristic_algorithm(instanceName, timeLimit)
             Val_heuristic = max_x_k
         end
     end
-    println("val : ", Val_heuristic)
 
     return Val_heuristic, time() - time_begin
 end
