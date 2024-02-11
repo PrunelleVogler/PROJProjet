@@ -3,9 +3,6 @@ using CPLEX
 using Libdl
 using TimerOutputs
 using Distributions
-epsilon = 0.0001
-instanceName = "Data/processed/2100_USA-road-d.BAY.gr"
-timeLimit = 600
 
 function lecture(file)
     if isfile(file)
@@ -97,9 +94,9 @@ function heuristic_algorithm(instanceName, timeLimit)
     n, s, t, S, d1, d2, p, ph, Mat = lecture(instanceName)
     nb_cities = n
     nb_edges = size(Mat)[1]
-    #Number of different robust value in the objective
+    #Number of robust values in the objective
     nb_U1 = 100
-    #Number of robust constraint considered
+    #Number of considered robust constraints
     nb_U2 = 1000
     
     # Static model
@@ -117,7 +114,7 @@ function heuristic_algorithm(instanceName, timeLimit)
             @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == i) == sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == i))
         end
     end
-
+    @constraint(m, sum( y[i] * p[i] for i in 1:nb_cities) <= S)
     # Stochastic robust constraints
     for i in 1:nb_U2
         delta = zeros(nb_cities)
@@ -132,7 +129,6 @@ function heuristic_algorithm(instanceName, timeLimit)
         end
         @constraint(m, sum(y[i] * (p[i] + delta[i] * ph[i]) for i in 1:nb_cities) <= S)
     end
-    @objective(m, Min, 0)
 
     # Solve nb_U1 problems with different objective
     x_val = zeros((nb_U1, nb_edges))
@@ -154,6 +150,7 @@ function heuristic_algorithm(instanceName, timeLimit)
         new_objective = @expression(m, sum(x[e] * Mat[e, 3] * (1 + d_1[k,e]) for e in 1:nb_edges))
         set_objective_function(m, new_objective)
         set_optimizer_attribute(m, "CPX_PARAM_TILIM", timeLimit / nb_U1)
+        println("Début résol ", k, " : ", time() - time_begin)
         optimize!(m)
         
         x_val_prime = JuMP.value.(x)
@@ -162,8 +159,8 @@ function heuristic_algorithm(instanceName, timeLimit)
         end
     end
     
-    #Find the solution of min max
-    Val_heuristic = 100000000
+    ### Finds the solution of min max
+    Val_heuristic = objective_value(m)
     for k in 1:nb_U1
         max_x_k = 0
         for j in 1:nb_U1
@@ -179,5 +176,3 @@ function heuristic_algorithm(instanceName, timeLimit)
 
     return Val_heuristic, time() - time_begin
 end
-
-#heuristic_algorithm(instanceName, 2)

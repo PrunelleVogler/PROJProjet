@@ -1,22 +1,18 @@
 using JuMP
 using CPLEX
 using Libdl
-instanceName = "Data/processed/20_USA-road-d.BAY.gr"
 
+### Reads the selected file and returns the data
 function lecture(file)
     if isfile(file)
-        # L’ouvrir
         myFile = open(file)
-        # Lire toutes les lignes d’un fichier
         data = readlines(myFile)
-        # Pour chaque ligne du fichier
         i = 1
         n, s, t, S, d1, d2 = 0, 0, 0, 0, 0, 0
         p = zeros(10)
         ph = zeros(10)
         Mat = zeros(10, 4)
         for line in data
-            # Afficher la ligne
             if i == 1
                 tab = split(line, " ")
                 n = parse(Int64, tab[3])
@@ -82,12 +78,12 @@ function lecture(file)
             end
             i += 1
         end
-        # Fermer le fichier
         close(myFile)
     end
     return n, s, t, S, d1, d2, p, ph, Mat
 end
 
+### Exact method using dualization
 function dual_algorithm(instanceName, timeLimit)
     time_begin = time()
     n, s, t, S, d1, d2, p, ph, Mat = lecture(instanceName)
@@ -107,6 +103,7 @@ function dual_algorithm(instanceName, timeLimit)
 
     @constraint(m, [i in 1:nb_cities], gamma + beta[i] >= ph[i] * y[i])
 
+    ### Flow constraints
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == s) == 1)
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == t) == 1)
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == s) == 0)
@@ -120,7 +117,6 @@ function dual_algorithm(instanceName, timeLimit)
         end
     end
 
-    
     for i in 1:nb_cities
         if i !=t && i !=s
             @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == i) == sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == i))
@@ -132,37 +128,27 @@ function dual_algorithm(instanceName, timeLimit)
     optimize!(m)
 
     feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
+    time_end = time()
+    lower_bound = 0
+    upper_bound = 0
     if feasibleSolutionFound
-        println("Solution trouvée de ", s, " a ", t)
+        println("Path from ", s, " to ", t)
         path = []
         x_val = JuMP.value.(x)
-        alpha_val = JuMP.value.(alpha)
-        lambda_val = JuMP.value.(lambda)
-        println("Valeurs de x")
-        obj = d1 * alpha_val + sum(Mat[e, 3] * x_val[e] + Mat[e, 4] * lambda_val[e] for e in 1:nb_edges)
         for e in 1:nb_edges
             if x_val[e] == 1
                 println(Mat[e, 1], " ", Mat[e, 2], " ")
                 push!(path,string(Mat[e, 1])*"-"*string(Mat[e, 2]))
             end
-        end        
-        println("Obj ", obj)
-
+        end
+        upper_bound = objective_value(m)
+        lower_bound = objective_bound(m)
     else
         path = []
     end
 
-    time_end = time()
-    lower_bound = 0
-    upper_bound = 0
-    if primal_status(m) == MOI.FEASIBLE_POINT
-        upper_bound = objective_value(m)
-        lower_bound = objective_bound(m)
-    end
     println("Upper bound ", upper_bound)
     println("Lower bound ", lower_bound)
     println("Time ", time_end - time_begin)
     return upper_bound, lower_bound, time_end - time_begin, path
 end
-
-# upper_bound, lower_bound, execution_time = dual_algorithm(instanceName, 10)

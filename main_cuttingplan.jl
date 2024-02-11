@@ -3,22 +3,18 @@ using CPLEX
 using Libdl
 using TimerOutputs
 epsilon = 0.0001
-# instanceName = "Data/processed/20_USA-road-d.BAY.gr"
 
+### Reads the selected file and returns the data
 function lecture(file)
     if isfile(file)
-        # L’ouvrir
         myFile = open(file)
-        # Lire toutes les lignes d’un fichier
         data = readlines(myFile)
-        # Pour chaque ligne du fichier
         i = 1
         n, s, t, S, d1, d2 = 0, 0, 0, 0, 0, 0
         p = zeros(10)
         ph = zeros(10)
         Mat = zeros(10, 4)
         for line in data
-            # Afficher la ligne
             if i == 1
                 tab = split(line, " ")
                 n = parse(Int64, tab[3])
@@ -84,7 +80,6 @@ function lecture(file)
             end
             i += 1
         end
-        # Fermer le fichier
         close(myFile)
     end
     return n, s, t, S, d1, d2, p, ph, Mat
@@ -96,14 +91,14 @@ function cutting_plane_algorithm(instanceName, timeLimit)
     nb_cities = n
     nb_edges = size(Mat)[1]
     
-    #================Master problem==================#
+    ### ===MASTER PROBLEM===
     m = Model(CPLEX.Optimizer)
     set_optimizer_attribute(m, "CPX_PARAM_SCRIND", 0)
     @variable(m, x[1:nb_edges], Bin)
     @variable(m, z >= 0)
     @variable(m, y[1:nb_cities], Bin)
     
-    # Contraintes de flot
+    ### Flow constraints
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == s) == 1)
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == t) == 1)
     @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == s) == 0)
@@ -113,15 +108,14 @@ function cutting_plane_algorithm(instanceName, timeLimit)
             @constraint(m, sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 1]) == i) == sum(x[e] for e in 1:nb_edges if convert(Int,Mat[e, 2]) == i))
         end
     end
-    #d_ij = Mat[ , 3]
-    #D_ij = Mat[ , 4]
-    # Contraintes U1 et U2
+
+    ### Robust constraints on U1 and U2
     @constraint(m, z >= sum( x[e] * Mat[e, 3] for e in 1:nb_edges))
     @constraint(m, sum( y[i] * p[i] for i in 1:nb_cities) <= S)
 
     @objective(m, Min, z)
 
-    #============Separation problem 1==================#
+    ### ===SEPARATION PROBLEM 1===
     m1 = Model(CPLEX.Optimizer)
     set_optimizer_attribute(m1, "CPX_PARAM_SCRIND", 0)
     @variable(m1, 0 <= delta1[1:nb_edges])
@@ -130,7 +124,7 @@ function cutting_plane_algorithm(instanceName, timeLimit)
     @constraint(m1, [e in 1:nb_edges], delta1[e] <= Mat[e, 4])
     @objective(m1, Max, 1)
 
-    #============Separation problem 2==================#
+    ### ===SEPARATION PROBLEM 2===
     m2 = Model(CPLEX.Optimizer)
     set_optimizer_attribute(m2, "CPX_PARAM_SCRIND", 0)
     @variable(m2, delta2[1:nb_cities] >=0)
@@ -156,12 +150,12 @@ function cutting_plane_algorithm(instanceName, timeLimit)
                 println("Valeur master pb a l'iteration ", iteration, " : ", z_val)
             end
 
-            # Modifier le pb 1 et le résoudre
+            ### Modifies separation problem 1 and solves it
             new_objective1 = @expression(m1, sum((delta1[e] + 1) * Mat[e, 3] * x_val[e] for e in 1:nb_edges))
             set_objective_function(m1, new_objective1)
             optimize!(m1)
 
-            # Modifier le pb 2 et le résoudre
+            ### Modifies separation problem 2 and solves it
             new_objective2 = @expression(m2, sum((delta2[i] * ph[i] + p[i]) * y_val[i] for i in 1:nb_cities))
             set_objective_function(m2, new_objective2)
             optimize!(m2)
@@ -169,7 +163,7 @@ function cutting_plane_algorithm(instanceName, timeLimit)
             feasibleSolutionFound1 = primal_status(m1) == MOI.FEASIBLE_POINT
             feasibleSolutionFound2 = primal_status(m2) == MOI.FEASIBLE_POINT
             if !feasibleSolutionFound1 || !feasibleSolutionFound2
-                println("Pb de sép non résolu")
+                println("Separation problem unsolved.")
                 no_optimal_solution_found = false
                 break
             end
@@ -178,26 +172,26 @@ function cutting_plane_algorithm(instanceName, timeLimit)
 
             if z_val >= obj1 - epsilon && obj2 <= S + epsilon
                 no_optimal_solution_found = false
-                println("Solution optimale trouvée en ", iteration, " iterations")
+                println("Optimal solution found in ", iteration, " iterations.")
                 upper_bound = objective_value(m)
                 lower_bound = objective_bound(m)
             end
+            ### Adds the needed cuts
             if z_val < obj1
                 delta1_val = JuMP.value.(delta1)
                 @constraint(m, z >= sum((delta1_val[e] + 1) * Mat[e, 3] * x[e] for e in 1:nb_edges))
-                #println("Ajout coupe 1")
             end
             if obj2 > S
                 delta2_val = JuMP.value.(delta2)
                 @constraint(m, sum((delta2_val[i] * ph[i] + p[i]) * y[i] for i in 1:nb_cities) <= S)
-                #println("Ajout coupe 2")
             end
         else
-            println("Problème de résolution du master problem")
+            println("Master problem unsolved.")
         end
         iteration += 1
-        #no_optimal_solution_found = false
     end
+    
+    ### If we stop before the end of the algorithm, the last solution is a lower bound.
     if time() - time_begin >= timeLimit
         optimize!(m)
         if primal_status(m) == MOI.FEASIBLE_POINT
@@ -206,22 +200,9 @@ function cutting_plane_algorithm(instanceName, timeLimit)
         end
     end
 
-    # feasibleSolutionFound = primal_status(m) == MOI.FEASIBLE_POINT
-    # if feasibleSolutionFound
-    #     println("Solution trouvée de ", s, " a ", t)
-    #     vX = JuMP.value.(x)
-    #     println("Valeurs de x")
-    #     for e in 1:nb_edges
-    #         if vX[e] == 1
-    #             println(Mat[e, 1], " ", Mat[e, 2], " ")
-    #         end
-    #     end
-    # end
     println("Upper bound ", upper_bound)
     println("Lower bound ", lower_bound)
     time_end = time()
     println("Time ", time_end - time_begin)
     return upper_bound, lower_bound, time_end - time_begin
 end
-
-# cutting_plane_algorithm(instanceName, 2)
